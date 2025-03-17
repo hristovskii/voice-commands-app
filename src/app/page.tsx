@@ -1,103 +1,233 @@
-import Image from "next/image";
+"use client"
 
-export default function Home() {
+import { useState, useEffect, useRef } from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Mic, MicOff, Volume2, ZoomIn, ZoomOut } from "lucide-react"
+
+export default function VoiceCommandsApp() {
+  const [isRecording, setIsRecording] = useState(false)
+  const [transcript, setTranscript] = useState("")
+  const [fontSize, setFontSize] = useState(16)
+  const [lastCommand, setLastCommand] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const recognitionRef = useRef<any>(null)
+
+  // Process the voice command
+  const processCommand = (command: string) => {
+    if (command.includes("increase font")) {
+      setFontSize((prev) => prev + 10)
+      setLastCommand("increase font")
+    } else if (command.includes("decrease font")) {
+      setFontSize((prev) => Math.max(10, prev - 10))
+      setLastCommand("decrease font")
+    }
+  }
+
+  // Toggle recording on/off
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording()
+    } else {
+      startRecording()
+    }
+  }
+
+  // Start the speech recognition
+  const startRecording = () => {
+    setErrorMessage(null)
+
+    // Check browser support
+    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+      setErrorMessage("Your browser doesn't support speech recognition. Try Chrome or Edge.")
+      return
+    }
+
+    try {
+      // Create a new instance each time
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      const recognition = new SpeechRecognition()
+
+      recognition.continuous = false // Changed to false to avoid some browser issues
+      recognition.interimResults = true
+      recognition.lang = "en-US"
+
+      recognition.onstart = () => {
+        setIsRecording(true)
+        setTranscript("")
+      }
+
+      recognition.onresult = (event: any) => {
+        let interimTranscript = ""
+        let finalTranscript = ""
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript
+            processCommand(transcript.toLowerCase().trim())
+          } else {
+            interimTranscript += transcript
+          }
+        }
+
+        setTranscript(finalTranscript || interimTranscript)
+      }
+
+      recognition.onerror = (event: any) => {
+        console.error("Speech recognition error", event.error)
+        setErrorMessage(`Recognition error: ${event.error}`)
+
+        // Don't automatically stop for all errors
+        if (event.error === "network" || event.error === "service-not-allowed") {
+          stopRecording()
+        }
+      }
+
+      recognition.onend = () => {
+        // Simply mark as not recording when it ends
+        setIsRecording(false)
+      }
+
+      // Store the recognition instance
+      recognitionRef.current = recognition
+
+      // Start recognition
+      recognition.start()
+    } catch (error) {
+      console.error("Failed to start speech recognition:", error)
+      setErrorMessage("Failed to start speech recognition")
+      setIsRecording(false)
+    }
+  }
+
+  // Stop the speech recognition
+  const stopRecording = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop()
+      } catch (error) {
+        console.error("Error stopping recognition:", error)
+      }
+      recognitionRef.current = null
+    }
+    setIsRecording(false)
+  }
+
+  // Clean up on component unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop()
+        } catch (error) {
+          console.error("Error stopping recognition on unmount:", error)
+        }
+      }
+    }
+  }, [])
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="min-h-screen p-4 md:p-8 max-w-4xl mx-auto bg-background">
+      <Card className="mb-8 border-2 shadow-lg">
+        <CardHeader className="text-center">
+          <CardTitle className="text-3xl font-bold">Voice Commands App</CardTitle>
+          <CardDescription>Control the app using your voice</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center">
+          <Button
+            onClick={toggleRecording}
+            className={`flex items-center gap-2 px-6 py-6 text-lg transition-all duration-300 ${
+              isRecording ? "bg-red-500 hover:bg-red-600 text-white" : "bg-primary hover:bg-primary/90"
+            }`}
+            size="lg"
+          >
+            {isRecording ? (
+              <>
+                <MicOff className="h-5 w-5" />
+                Stop Recording
+              </>
+            ) : (
+              <>
+                <Mic className="h-5 w-5" />
+                Start Recording
+              </>
+            )}
+          </Button>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          {errorMessage && (
+            <div className="mt-4 p-2 bg-red-100 text-red-800 rounded-md w-full text-center">{errorMessage}</div>
+          )}
+
+          <div className="mt-6 p-4 border rounded-md w-full bg-muted/30">
+            <div className="flex items-center gap-2 mb-2">
+              <Volume2 className="h-4 w-4 text-primary" />
+              <p className="font-medium">Recognized Speech:</p>
+              {isRecording && (
+                <Badge variant="outline" className="ml-auto animate-pulse bg-red-100 text-red-800 border-red-200">
+                  Listening...
+                </Badge>
+              )}
+            </div>
+            <p className="italic min-h-[50px] p-2 bg-background rounded border">{transcript || "Say something..."}</p>
+
+            {lastCommand && (
+              <div className="mt-2 text-sm text-muted-foreground">
+                Last command executed: <span className="font-semibold text-primary">{lastCommand}</span>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mb-8 border shadow-md">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xl font-semibold">Sample Text</CardTitle>
+            <div className="flex items-center gap-2">
+              <ZoomOut className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{fontSize}px</span>
+              <ZoomIn className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div style={{ fontSize: `${fontSize}px` }} className="transition-all duration-300">
+            <p className="mb-4">
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam in dui mauris. Vivamus hendrerit arcu sed
+              erat molestie vehicula. Sed auctor neque eu tellus rhoncus ut eleifend nibh porttitor.
+            </p>
+            <p>
+              Ut in nulla enim. Phasellus molestie magna non est bibendum non venenatis nisl tempor. Suspendisse dictum
+              feugiat nisl ut dapibus. Mauris iaculis porttitor posuere.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-primary/5 border shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg">Available Voice Commands</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul className="grid gap-2">
+            <li className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                "Increase font"
+              </Badge>
+              <span>Increases text size by 10px</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                "Decrease font"
+              </Badge>
+              <span>Decreases text size by 10px</span>
+            </li>
+          </ul>
+        </CardContent>
+      </Card>
     </div>
-  );
+  )
 }
+
